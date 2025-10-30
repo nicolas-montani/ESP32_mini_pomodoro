@@ -2,7 +2,9 @@
 #include "pomodoro.h"
 #include "monitor.h"
 #include "ultrasound.h"
-#include "happy_sad.h"
+#include "buzzer.h"
+#include "shaking.h"
+#include "request.h"
 
 // Pin definitions
 #define SDA_PIN 21
@@ -12,6 +14,11 @@
 #ifndef BUZZER_PIN
 #define BUZZER_PIN 13  // Default buzzer pin; override when wiring differs
 #endif
+#define SHAKING_PIN 14  // KY-002 vibration/shock sensor (moved from 12 due to boot strapping)
+
+// WiFi credentials
+const char* WIFI_SSID = "Self_Destruction_Device";
+const char* WIFI_PASSWORD = "123456789";
 
 // Button state variables
 bool button1LastState = HIGH;
@@ -32,11 +39,39 @@ int ultrasoundCheckCount = 0;
 float ultrasoundMeasurements[3] = {0.0, 0.0, 0.0};
 bool userLost = false;
 
+// Shaking sensor monitoring (interrupt-based)
+volatile bool shakingDetected = false;
+unsigned long lastShakingTrigger = 0;
+const unsigned long shakingCooldown = 500; // 500ms cooldown between triggers
+
 // Mode selection (when idle)
 IdleMode selectedMode = MODE_WORK;
 
+// Interrupt handler for shaking sensor (must be IRAM_ATTR for ESP32)
+void IRAM_ATTR onShakingDetected() {
+  shakingDetected = true;
+}
+
 void setup() {
   Serial.begin(115200);
+  delay(1000); // Wait for serial to be ready
+
+  Serial.println("\n\n=================================");
+  Serial.println("   ESP32 Pomodoro Timer v1.0");
+  Serial.println("=================================\n");
+
+  // Connect to WiFi first
+  Serial.println(">>> Initializing WiFi...");
+  if (request_init(WIFI_SSID, WIFI_PASSWORD)) {
+    Serial.println(">>> WiFi connected successfully!\n");
+
+    // Fetch mensa menu
+    Serial.println(">>> Fetching Mensa Menu...");
+    request_fetch_mensa_menu();
+    Serial.println();
+  } else {
+    Serial.println(">>> WiFi connection failed! Continuing without WiFi...\n");
+  }
 
   // Initialize pins so feedback can trigger during startup
   pinMode(BUTTON1_PIN, INPUT_PULLUP);
@@ -56,7 +91,7 @@ void setup() {
 
   // Initialize RoboEyes
   monitor_roboeyes_init();
-  buzzer_sound_ToneHappy1(BUZZER_PIN);
+  buzzer_play_sound_happy1(BUZZER_PIN);
   monitor_roboeyes_show_init();
   
   //monitor_roboeyes_show_return() ;
@@ -69,12 +104,21 @@ void setup() {
   // Measure initial distance after start animation
   ultrasound_measure_initial_distance();
 
+  // Initialize shaking sensor with interrupt (instant response!)
+  shaking_init(SHAKING_PIN);
+  shaking_attach_interrupt(onShakingDetected);
+
+  // Initialize Mario music buzzer
+  buzzer_music_mario_init(BUZZER_PIN);
+
   // Initialize pomodoro timer
   pomodoro_init();
 
   Serial.println("Pomodoro Timer Initialized");
   Serial.println("BTN1 (D5): Start/Pause");
   Serial.println("BTN2 (D4): Toggle Mode / Next/Reset");
+  Serial.println("Shaking sensor on D14 initialized");
+  Serial.println("Shake sensor to play Mario music!");
 
   // Show idle screen
   monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
@@ -212,7 +256,7 @@ void loop() {
           Serial.println("Timer paused due to user out of range");
 
           // Play sad tone to indicate user left the workspace
-          buzzer_sound_ToneSad1(BUZZER_PIN);
+          buzzer_play_sound_sad1(BUZZER_PIN);
 
           // Show the "lost" animation
           monitor_roboeyes_show_lost();
@@ -234,7 +278,7 @@ void loop() {
           Serial.println("Timer resumed - user back in range");
 
           // Play happy tone to celebrate the user's return
-          buzzer_sound_ToneHappy1(BUZZER_PIN);
+          buzzer_play_sound_happy1(BUZZER_PIN);
 
           // Return to running screen after animation
           monitor_show_running_screen(pomodoro_get_state(),
@@ -248,6 +292,22 @@ void loop() {
 
       lastUltrasoundCheck = millis();
     }
+  }
+
+  // Check shaking sensor (interrupt-based - instant response!)
+  if (shakingDetected && (millis() - lastShakingTrigger >= shakingCooldown)) {
+    shakingDetected = false; // Reset flag
+
+    Serial.println("!!! SHAKING DETECTED (INSTANT) !!!");
+    Serial.println("Playing Mario overworld theme...");
+
+    // Play Mario music
+    buzzer_music_mario_play_overworld();
+
+    Serial.println("Mario music finished!");
+
+    // Update last trigger time for cooldown
+    lastShakingTrigger = millis();
   }
 
   // Update display periodically

@@ -1,8 +1,75 @@
 #include <Arduino.h>
+#include "buzzer.h"
 
-#include "mario.h"
+namespace {
+struct ToneStep {
+  int frequency;
+  int durationMs;
+  int pauseMs;
+};
 
-// ===== Notes (as provided) =====
+constexpr int NOTE_C5 = 523;
+constexpr int NOTE_E5 = 659;
+constexpr int NOTE_G5 = 784;
+constexpr int NOTE_B5 = 988;
+constexpr int NOTE_A4 = 440;
+constexpr int NOTE_F4 = 349;
+constexpr int NOTE_D4 = 294;
+constexpr int NOTE_C4 = 262;
+constexpr int NOTE_GS4 = 415;
+constexpr int NOTE_FS4 = 370;
+
+constexpr ToneStep happyTone1[] = {
+    {NOTE_C5, 160, 40},
+    {NOTE_E5, 160, 40},
+    {NOTE_G5, 220, 80},
+};
+
+constexpr ToneStep happyTone2[] = {
+    {NOTE_E5, 150, 30},
+    {NOTE_G5, 150, 30},
+    {NOTE_B5, 220, 100},
+};
+
+constexpr ToneStep sadTone1[] = {
+    {NOTE_A4, 200, 50},
+    {NOTE_F4, 200, 50},
+    {NOTE_D4, 240, 120},
+};
+
+constexpr ToneStep sadTone2[] = {
+    {NOTE_GS4, 180, 40},
+    {NOTE_FS4, 200, 40},
+    {NOTE_C4, 260, 140},
+};
+
+template <size_t N>
+void playSequence(int buzzerPin, const ToneStep (&steps)[N]) {
+  for (const auto& step : steps) {
+    tone(buzzerPin, step.frequency, step.durationMs);
+    delay(step.durationMs + step.pauseMs);
+    noTone(buzzerPin);
+  }
+}
+}  // namespace
+
+void buzzer_play_sound_happy1(int buzzerPin) {
+  playSequence(buzzerPin, happyTone1);
+}
+
+void buzzer_play_sound_happy2(int buzzerPin) {
+  playSequence(buzzerPin, happyTone2);
+}
+
+void buzzer_play_sound_sad1(int buzzerPin) {
+  playSequence(buzzerPin, sadTone1);
+}
+
+void buzzer_play_sound_sad2(int buzzerPin) {
+  playSequence(buzzerPin, sadTone2);
+}
+
+// ===== Mario Music Notes =====
 #define NOTE_B0  31
 #define NOTE_C1  33
 #define NOTE_CS1 35
@@ -40,30 +107,19 @@
 #define NOTE_A3  220
 #define NOTE_AS3 233
 #define NOTE_B3  247
-#define NOTE_C4  262
 #define NOTE_CS4 277
-#define NOTE_D4  294
 #define NOTE_DS4 311
 #define NOTE_E4  330
-#define NOTE_F4  349
-#define NOTE_FS4 370
-#define NOTE_G4  392
-#define NOTE_GS4 415
-#define NOTE_A4  440
 #define NOTE_AS4 466
 #define NOTE_B4  494
-#define NOTE_C5  523
 #define NOTE_CS5 554
 #define NOTE_D5  587
 #define NOTE_DS5 622
-#define NOTE_E5  659
 #define NOTE_F5  698
 #define NOTE_FS5 740
-#define NOTE_G5  784
 #define NOTE_GS5 831
 #define NOTE_A5  880
 #define NOTE_AS5 932
-#define NOTE_B5  988
 #define NOTE_C6  1047
 #define NOTE_CS6 1109
 #define NOTE_D6  1175
@@ -93,12 +149,10 @@
 #define NOTE_D8  4699
 #define NOTE_DS8 4978
 
-// ===== Pins =====
+// ===== Pins for Mario Music =====
 namespace {
 
-uint8_t marioBuzzerPin = 13;         // buzzer (configurable via buzzer_music_mario_init)
-constexpr uint8_t LED_PIN    = 13;  // LED indicator
-constexpr uint8_t SHOCK_PIN  = 10;  // vibration sensor (digital)
+uint8_t marioBuzzerPin = 13;  // buzzer (configurable via buzzer_music_mario_init)
 
 }
 
@@ -201,17 +255,15 @@ int underworld_tempo[] = {
 };
 
 // ===== Utility: safe buzz (handles frequency == 0) =====
-void buzz(int targetPin, long frequency, long lengthMs) {
+void buzzer_play_music_with_light(int targetPin, long frequency, long lengthMs) {
   if (lengthMs <= 0) return;
 
   if (frequency <= 0) {
-    // Rest: keep LED off and just wait
-    digitalWrite(LED_PIN, LOW);
+    // Rest: just wait
     delay(lengthMs);
     return;
   }
 
-  digitalWrite(LED_PIN, HIGH);
   long halfPeriodUs = 1000000L / frequency / 2L;   // microseconds
   long cycles = (frequency * lengthMs) / 1000L;    // total cycles
 
@@ -221,7 +273,6 @@ void buzz(int targetPin, long frequency, long lengthMs) {
     digitalWrite(targetPin, LOW);
     delayMicroseconds(halfPeriodUs);
   }
-  digitalWrite(LED_PIN, LOW);
 }
 
 // ===== Play functions =====
@@ -229,7 +280,7 @@ void buzzer_music_mario_play_overworld() {
   int size = sizeof(marioMelody) / sizeof(int);
   for (int i = 0; i < size; i++) {
     int noteDuration = 1000 / marioTempo[i];      // e.g., 1000/4 = quarter
-    buzz(marioBuzzerPin, marioMelody[i], noteDuration);
+    buzzer_play_music_with_light(marioBuzzerPin, marioMelody[i], noteDuration);
     delay((int)(noteDuration * 0.30));            // small gap
   }
 }
@@ -238,39 +289,13 @@ void buzzer_music_mario_play_underworld() {
   int size = sizeof(underworld_melody) / sizeof(int);
   for (int i = 0; i < size; i++) {
     int noteDuration = 1000 / underworld_tempo[i];
-    buzz(marioBuzzerPin, underworld_melody[i], noteDuration);
+    buzzer_play_music_with_light(marioBuzzerPin, underworld_melody[i], noteDuration);
     delay((int)(noteDuration * 0.30));
   }
 }
 
-// ===== Setup & Loop (sensor-triggered) =====
+// ===== Setup =====
 void buzzer_music_mario_init(uint8_t buzzerPin) {
   marioBuzzerPin = buzzerPin;
   pinMode(marioBuzzerPin, OUTPUT);
-  pinMode(LED_PIN, OUTPUT);
-  pinMode(SHOCK_PIN, INPUT_PULLUP); // active LOW
-  digitalWrite(LED_PIN, LOW);
-  // Serial.begin(9600); // optional for debugging
-}
-
-void buzzer_music_mario_loop_iteration() {
-  bool triggered = (digitalRead(SHOCK_PIN) == LOW);  // LOW = vibration detected
-
-  if (triggered) {
-    // Optional: Serial.println("Triggered: playing tunes");
-    buzzer_music_mario_play_overworld();
-    buzzer_music_mario_play_overworld();
-    buzzer_music_mario_play_underworld();
-
-    // Cooldown to avoid chatter from the vibration sensor
-    delay(300);
-
-    // Wait for sensor to release
-    while (digitalRead(SHOCK_PIN) == LOW) {
-      delay(10);
-    }
-  }
-
-  // Idle behaviour (LED off)
-  digitalWrite(LED_PIN, LOW);
 }
