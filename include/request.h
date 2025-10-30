@@ -2,6 +2,18 @@
 
 #include <Arduino.h>
 
+// Maximum number of menu items to store
+#define MAX_MENU_ITEMS 20
+
+// Structure to hold a single menu item
+struct MensaMenuItem {
+  String date;
+  String weekday;
+  String title;
+  String price_chf;
+  String source;
+};
+
 /**
  * Initializes the WiFi connection and HTTP client for making requests.
  * Must be called before using any other request functions.
@@ -33,3 +45,17 @@ bool request_is_wifi_connected();
  * @return RSSI value in dBm
  */
 int request_get_wifi_rssi();
+
+/**
+ * Gets the stored mensa menu items.
+ *
+ * @return Pointer to array of menu items
+ */
+MensaMenuItem* request_get_menu_items();
+
+/**
+ * Gets the number of stored menu items.
+ *
+ * @return Number of menu items (0 if none)
+ */
+int request_get_menu_count();

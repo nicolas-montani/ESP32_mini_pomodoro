@@ -7,6 +7,8 @@
 namespace {
   const char* mensaApiUrl = "https://mensa-hsg.vercel.app/menu.json";
   bool wifiInitialized = false;
+  MensaMenuItem menuItems[MAX_MENU_ITEMS];
+  int menuItemCount = 0;
 }
 
 bool request_init(const char* ssid, const char* password) {
@@ -53,9 +55,20 @@ bool request_fetch_mensa_menu() {
 
   HTTPClient http;
   http.begin(mensaApiUrl);
-  http.setTimeout(10000); // 10 second timeout
+
+  // Increase timeout to 20 seconds for slow connections
+  http.setTimeout(20000);
+
+  // Set connection timeout separately
+  http.setConnectTimeout(10000);
+
+  // Add user agent to avoid potential blocking
+  http.addHeader("User-Agent", "ESP32-Mensa-Client/1.0");
+  http.addHeader("Accept", "application/json");
 
   Serial.println("Sending HTTP GET request...");
+  Serial.println("(This may take a few seconds...)");
+
   int httpResponseCode = http.GET();
 
   if (httpResponseCode > 0) {
@@ -68,51 +81,60 @@ bool request_fetch_mensa_menu() {
       Serial.println(payload);
       Serial.println("==================\n");
 
-      // Optional: Parse JSON for better formatting
+      // Parse JSON and store menu items
       JsonDocument doc;
       DeserializationError error = deserializeJson(doc, payload);
 
       if (!error) {
         Serial.println("=== Parsed Menu ===");
 
-        // Display date if available
-        if (doc.containsKey("date")) {
-          Serial.print("Date: ");
-          Serial.println(doc["date"].as<String>());
-        }
+        // The API returns a flat array of menu items
+        if (doc.is<JsonArray>()) {
+          JsonArray items = doc.as<JsonArray>();
+          int count = items.size();
+          Serial.print("Found ");
+          Serial.print(count);
+          Serial.println(" menu items\n");
 
-        // Display menu items
-        if (doc.containsKey("menu") && doc["menu"].is<JsonArray>()) {
-          JsonArray menu = doc["menu"].as<JsonArray>();
-          int index = 1;
+          // Store menu items (up to MAX_MENU_ITEMS)
+          menuItemCount = 0;
+          int index = 0;
+          for (JsonVariant item : items) {
+            if (index >= MAX_MENU_ITEMS) {
+              Serial.println("⚠ Menu limit reached, storing first 20 items only");
+              break;
+            }
 
-          for (JsonVariant item : menu) {
-            Serial.print("\n[");
-            Serial.print(index++);
+            // Store in global array
+            menuItems[index].date = item["date"].as<String>();
+            menuItems[index].weekday = item["weekday"].as<String>();
+            menuItems[index].title = item["title"].as<String>();
+            menuItems[index].price_chf = item["price_chf"].as<String>();
+            menuItems[index].source = item["source"].as<String>();
+
+            // Print to serial
+            Serial.print("[");
+            Serial.print(index + 1);
             Serial.println("]");
+            Serial.print("Day: ");
+            Serial.println(menuItems[index].weekday);
+            Serial.print("Date: ");
+            Serial.println(menuItems[index].date);
+            Serial.print("Title: ");
+            Serial.println(menuItems[index].title);
+            Serial.print("Price: CHF ");
+            Serial.println(menuItems[index].price_chf);
+            Serial.println("---");
 
-            if (item.containsKey("category")) {
-              Serial.print("  Category: ");
-              Serial.println(item["category"].as<String>());
-            }
-
-            if (item.containsKey("title")) {
-              Serial.print("  Title: ");
-              Serial.println(item["title"].as<String>());
-            }
-
-            if (item.containsKey("description")) {
-              Serial.print("  Description: ");
-              Serial.println(item["description"].as<String>());
-            }
-
-            if (item.containsKey("price")) {
-              Serial.print("  Price: CHF ");
-              Serial.println(item["price"].as<String>());
-            }
+            index++;
+            menuItemCount++;
           }
+
+          Serial.print("✓ Stored ");
+          Serial.print(menuItemCount);
+          Serial.println(" menu items in memory");
         } else {
-          Serial.println("No menu array found in JSON");
+          Serial.println("✗ Expected JSON array but got different format");
         }
 
         Serial.println("==================");
@@ -144,4 +166,12 @@ int request_get_wifi_rssi() {
     return WiFi.RSSI();
   }
   return 0;
+}
+
+MensaMenuItem* request_get_menu_items() {
+  return menuItems;
+}
+
+int request_get_menu_count() {
+  return menuItemCount;
 }

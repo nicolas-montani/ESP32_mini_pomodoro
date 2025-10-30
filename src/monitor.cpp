@@ -1,5 +1,6 @@
 #include "monitor.h"
 #include "meme_bitmap.h"
+#include "request.h"
 #include <Wire.h>
 #include <U8g2lib.h>
 #include <FluxGarage_RoboEyes.h>
@@ -585,5 +586,184 @@ void monitor_roboeyes_show_return() {
   }
 
   delay(2000); // Hold the final message for 2 seconds
+}
+
+// Show shake expression - rapid eye movements with "Shake Shake!"
+void monitor_roboeyes_show_shake() {
+  roboEyes.setMood(HAPPY);  // Happy/excited mood
+  roboEyes.setCuriosity(true);  // Makes eyes more expressive
+
+  // Rapid shaking animation - quick movements back and forth
+  unsigned long startTime = millis();
+  int shakeDuration = 100;  // Very quick movements for shake effect
+  int totalShakes = 8;  // Number of shake cycles
+
+  for (int shake = 0; shake < totalShakes; shake++) {
+    // Quick left
+    startTime = millis();
+    roboEyes.setPosition(W);  // West - look left
+    while (millis() - startTime < shakeDuration) {
+      display.clearDisplay();
+      roboEyes.update();
+      display.display();
+      delay(50);
+    }
+
+    // Quick right
+    startTime = millis();
+    roboEyes.setPosition(E);  // East - look right
+    while (millis() - startTime < shakeDuration) {
+      display.clearDisplay();
+      roboEyes.update();
+      display.display();
+      delay(50);
+    }
+  }
+
+  // Return to center
+  roboEyes.setPosition(DEFAULT);
+  roboEyes.setCuriosity(false);
+
+  // Blink for excitement
+  roboEyes.blink();
+
+  // Quick blink animation
+  startTime = millis();
+  while (millis() - startTime < 200) {
+    display.clearDisplay();
+    roboEyes.update();
+    display.display();
+    delay(50);
+  }
+
+  // Keep happy mood
+  roboEyes.setMood(HAPPY);
+
+  // Display excited eyes with message
+  const char* message = "Shake Shake!";
+  int messageLen = strlen(message);
+  int textY = 52;
+
+  display.setTextSize(1);
+
+  // Calculate center position for the text
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(message, 0, 0, &x1, &y1, &w, &h);
+  int centerX = (SCREEN_WIDTH - w) / 2;
+
+  // Typing effect - reveal one character at a time
+  int charDelay = 60; // Faster typing for excitement
+
+  for (int i = 0; i <= messageLen; i++) {
+    display.clearDisplay();
+    roboEyes.update();
+
+    // Draw the text up to current character
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(centerX, textY);
+
+    for (int j = 0; j < i; j++) {
+      display.print(message[j]);
+    }
+
+    display.display();
+    delay(charDelay);
+  }
+
+  delay(1500); // Hold the final message for 1.5 seconds
+}
+
+// Show mensa menu with navigation
+void monitor_show_mensa_menu(int currentIndex, int totalItems) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+
+  if (totalItems == 0) {
+    // No menu items available
+    display.setCursor(10, 10);
+    display.println("No menu data");
+    display.setCursor(10, 25);
+    display.println("available");
+    display.setCursor(0, 50);
+    display.println("Press both buttons");
+    display.setCursor(0, 58);
+    display.println("to exit");
+    display.display();
+    return;
+  }
+
+  // Get menu items
+  MensaMenuItem* items = request_get_menu_items();
+  MensaMenuItem& item = items[currentIndex];
+
+  // Top bar - Navigation info
+  display.setCursor(0, 0);
+  display.print("Menu ");
+  display.print(currentIndex + 1);
+  display.print("/");
+  display.print(totalItems);
+
+  // Draw line separator
+  display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
+
+  // Display weekday and date
+  display.setCursor(0, 13);
+  display.print(item.weekday);
+  display.print(" ");
+  display.print(item.date);
+
+  // Draw line separator
+  display.drawLine(0, 22, 127, 22, SSD1306_WHITE);
+
+  // Display dish title (wrapped if necessary)
+  display.setCursor(0, 26);
+
+  // Word wrap the title to fit screen (max ~21 chars per line)
+  String title = item.title;
+  int lineHeight = 8;
+  int maxCharsPerLine = 21;
+  int yPos = 26;
+
+  if (title.length() <= maxCharsPerLine) {
+    display.println(title);
+  } else {
+    // Simple word wrap
+    int lastSpace = 0;
+    int lineStart = 0;
+
+    for (int i = 0; i < title.length() && yPos < 48; i++) {
+      if (title[i] == ' ') {
+        lastSpace = i;
+      }
+
+      if (i - lineStart >= maxCharsPerLine || i == title.length() - 1) {
+        int endPos = (i == title.length() - 1) ? i + 1 : lastSpace;
+        if (endPos <= lineStart) endPos = i; // No space found, hard break
+
+        display.setCursor(0, yPos);
+        display.println(title.substring(lineStart, endPos));
+        yPos += lineHeight;
+        lineStart = endPos + 1;
+        i = endPos;
+      }
+    }
+  }
+
+  // Draw line separator
+  display.drawLine(0, 48, 127, 48, SSD1306_WHITE);
+
+  // Bottom section - Price
+  display.setCursor(0, 52);
+  display.print("Price: CHF ");
+  display.print(item.price_chf);
+
+  // Navigation help
+  display.setTextSize(1);
+  display.setCursor(80, 0);
+  display.print("<-BTN->");
+
+  display.display();
 }
 
