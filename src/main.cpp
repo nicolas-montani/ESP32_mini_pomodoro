@@ -2,12 +2,16 @@
 #include "pomodoro.h"
 #include "monitor.h"
 #include "ultrasound.h"
+#include "happy_sad.h"
 
 // Pin definitions
 #define SDA_PIN 21
 #define SCL_PIN 22
 #define BUTTON1_PIN 5  // Start/Pause button
 #define BUTTON2_PIN 4  // Toggle Work/Break OR Next/Reset when running
+#ifndef BUZZER_PIN
+#define BUZZER_PIN 13  // Default buzzer pin; override when wiring differs
+#endif
 
 // Button state variables
 bool button1LastState = HIGH;
@@ -34,6 +38,12 @@ IdleMode selectedMode = MODE_WORK;
 void setup() {
   Serial.begin(115200);
 
+  // Initialize pins so feedback can trigger during startup
+  pinMode(BUTTON1_PIN, INPUT_PULLUP);
+  pinMode(BUTTON2_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  noTone(BUZZER_PIN);
+
   // Initialize monitor (display)
   if (!monitor_init(SDA_PIN, SCL_PIN)) {
     Serial.println("Failed to initialize monitor!");
@@ -46,8 +56,9 @@ void setup() {
 
   // Initialize RoboEyes
   monitor_roboeyes_init();
-
+  playHappyTone1(BUZZER_PIN);
   monitor_roboeyes_show_init();
+  
   //monitor_roboeyes_show_return() ;
   //monitor_roboeyes_show_lost();
 
@@ -57,10 +68,6 @@ void setup() {
 
   // Measure initial distance after start animation
   ultrasound_measure_initial_distance();
-
-  // Initialize pins
-  pinMode(BUTTON1_PIN, INPUT_PULLUP);
-  pinMode(BUTTON2_PIN, INPUT_PULLUP);
 
   // Initialize pomodoro timer
   pomodoro_init();
@@ -204,6 +211,9 @@ void loop() {
           pomodoro_pause();
           Serial.println("Timer paused due to user out of range");
 
+          // Play sad tone to indicate user left the workspace
+          playSadTone1(BUZZER_PIN);
+
           // Show the "lost" animation
           monitor_roboeyes_show_lost();
 
@@ -222,6 +232,9 @@ void loop() {
           // Resume the pomodoro timer
           pomodoro_resume();
           Serial.println("Timer resumed - user back in range");
+
+          // Play happy tone to celebrate the user's return
+          playHappyTone1(BUZZER_PIN);
 
           // Return to running screen after animation
           monitor_show_running_screen(pomodoro_get_state(),
