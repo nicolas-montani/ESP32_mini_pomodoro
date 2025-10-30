@@ -96,7 +96,7 @@
 // ===== Pins =====
 namespace {
 
-uint8_t marioBuzzerPin = 13;         // buzzer (configurable via marioInit)
+uint8_t marioBuzzerPin = 13;         // buzzer (configurable via buzzer_music_mario_init)
 constexpr uint8_t LED_PIN    = 13;  // LED indicator
 constexpr uint8_t SHOCK_PIN  = 10;  // vibration sensor (digital)
 
@@ -225,7 +225,7 @@ void buzz(int targetPin, long frequency, long lengthMs) {
 }
 
 // ===== Play functions =====
-void playMario() {
+void buzzer_music_mario_play_overworld() {
   int size = sizeof(marioMelody) / sizeof(int);
   for (int i = 0; i < size; i++) {
     int noteDuration = 1000 / marioTempo[i];      // e.g., 1000/4 = quarter
@@ -234,7 +234,7 @@ void playMario() {
   }
 }
 
-void playUnderworld() {
+void buzzer_music_mario_play_underworld() {
   int size = sizeof(underworld_melody) / sizeof(int);
   for (int i = 0; i < size; i++) {
     int noteDuration = 1000 / underworld_tempo[i];
@@ -244,7 +244,7 @@ void playUnderworld() {
 }
 
 // ===== Setup & Loop (sensor-triggered) =====
-void marioInit(uint8_t buzzerPin) {
+void buzzer_music_mario_init(uint8_t buzzerPin) {
   marioBuzzerPin = buzzerPin;
   pinMode(marioBuzzerPin, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
@@ -253,14 +253,14 @@ void marioInit(uint8_t buzzerPin) {
   // Serial.begin(9600); // optional for debugging
 }
 
-void marioLoopIteration() {
+void buzzer_music_mario_loop_iteration() {
   bool triggered = (digitalRead(SHOCK_PIN) == LOW);  // LOW = vibration detected
 
   if (triggered) {
     // Optional: Serial.println("Triggered: playing tunes");
-    playMario();
-    playMario();
-    playUnderworld();
+    buzzer_music_mario_play_overworld();
+    buzzer_music_mario_play_overworld();
+    buzzer_music_mario_play_underworld();
 
     // Cooldown to avoid chatter from the vibration sensor
     delay(300);

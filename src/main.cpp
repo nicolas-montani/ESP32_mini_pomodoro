@@ -56,7 +56,7 @@ void setup() {
 
   // Initialize RoboEyes
   monitor_roboeyes_init();
-  playHappyTone1(BUZZER_PIN);
+  buzzer_sound_ToneHappy1(BUZZER_PIN);
   monitor_roboeyes_show_init();
   
   //monitor_roboeyes_show_return() ;
@@ -212,7 +212,7 @@ void loop() {
           Serial.println("Timer paused due to user out of range");
 
           // Play sad tone to indicate user left the workspace
-          playSadTone1(BUZZER_PIN);
+          buzzer_sound_ToneSad1(BUZZER_PIN);
 
           // Show the "lost" animation
           monitor_roboeyes_show_lost();
@@ -234,7 +234,7 @@ void loop() {
           Serial.println("Timer resumed - user back in range");
 
           // Play happy tone to celebrate the user's return
-          playHappyTone1(BUZZER_PIN);
+          buzzer_sound_ToneHappy1(BUZZER_PIN);
 
           // Return to running screen after animation
           monitor_show_running_screen(pomodoro_get_state(),

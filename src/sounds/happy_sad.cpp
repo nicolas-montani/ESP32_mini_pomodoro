@@ -54,18 +54,18 @@ void playSequence(int buzzerPin, const ToneStep (&steps)[N]) {
 }
 }  // namespace
 
-void playHappyTone1(int buzzerPin) {
+void buzzer_sound_ToneHappy1(int buzzerPin) {
   playSequence(buzzerPin, happyTone1);
 }
 
-void playHappyTone2(int buzzerPin) {
+void buzzer_sound_ToneHappy2(int buzzerPin) {
   playSequence(buzzerPin, happyTone2);
 }
 
-void playSadTone1(int buzzerPin) {
+void buzzer_sound_ToneSad1(int buzzerPin) {
   playSequence(buzzerPin, sadTone1);
 }
 
-void playSadTone2(int buzzerPin) {
+void buzzer_sound_ToneSad2(int buzzerPin) {
   playSequence(buzzerPin, sadTone2);
 }

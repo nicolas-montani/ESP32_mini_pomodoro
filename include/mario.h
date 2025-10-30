@@ -6,20 +6,20 @@
  * Initializes the pins used by the Mario theme controller.
  * Must be called before any play/loop helpers that interact with the hardware.
  */
-void marioInit(uint8_t buzzerPin = 3);
+void buzzer_music_mario_init(uint8_t buzzerPin = 3);
 
 /**
  * Executes one iteration of the sensor-driven Mario theme loop.
  * Call this repeatedly inside your main loop.
  */
-void marioLoopIteration();
+void buzzer_music_mario_loop_iteration();
 
 /**
  * Plays the Mario overworld theme once using the configured pins.
  */
-void playMario();
+void buzzer_music_mario_play_overworld();
 
 /**
  * Plays the Mario underworld theme once using the configured pins.
  */
-void playUnderworld();
+void buzzer_music_mario_play_underworld();
