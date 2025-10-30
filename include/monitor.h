@@ -26,6 +26,7 @@ void monitor_show_idle_screen(IdleMode selectedMode, int completedCount);
 void monitor_show_running_screen(PomodoroState state, unsigned long timeRemaining, int completedCount);
 void monitor_show_finished_screen(int completedCount);
 void monitor_show_boot_screen();
+void monitor_show_mensa_menu(int currentIndex, int totalItems);
 
 // Utility functions
 String monitor_format_time(unsigned long seconds);
@@ -41,6 +42,7 @@ void monitor_roboeyes_show_sad();
 void monitor_roboeyes_show_init();
 void monitor_roboeyes_show_lost();
 void monitor_roboeyes_show_return();
+void monitor_roboeyes_show_shake();
 void monitor_roboeyes_animate(int duration_ms);
 
 #endif
