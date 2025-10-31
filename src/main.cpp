@@ -5,25 +5,99 @@
 #include "buzzer.h"
 #include "shaking.h"
 #include "request.h"
-#include "lights.h"
 #include "gambling.h"
+
+extern IdleMode selectedMode;
 
 namespace {
 PomodoroState lastPomodoroState = POMODORO_IDLE;
+bool settingsMode = false;
+bool settingsForWork = true;
+int settingsMinutes = 0;
+bool settingsRequireRelease = false;
+const unsigned long doubleClickInterval = 350;
+bool button2SingleClickPending = false;
+unsigned long button2FirstClickTime = 0;
+unsigned long settingsReentryBlockUntil = 0;
 
-void updateLightsForState(PomodoroState state) {
-  switch (state) {
-    case POMODORO_WORK:
-      lights_show_work();
-      break;
-    case POMODORO_SHORT_BREAK:
-    case POMODORO_LONG_BREAK:
-      lights_show_break();
-      break;
-    default:
-      lights_show_idle();
-      break;
+const char* settingsLabel() {
+  return settingsForWork ? "WORK" : "BREAK";
+}
+
+void showSettingsScreen() {
+  monitor_show_time_adjustment(settingsLabel(), settingsMinutes);
+}
+
+void enterSettingsMode(IdleMode tab) {
+  if (pomodoro_get_state() != POMODORO_IDLE) {
+    return;
   }
+  settingsMode = true;
+  settingsRequireRelease = true;
+  settingsForWork = (tab == MODE_WORK);
+  button2SingleClickPending = false;
+
+  if (settingsForWork) {
+    settingsMinutes = static_cast<int>(pomodoro_get_work_duration() / 60);
+  } else {
+    settingsMinutes = static_cast<int>(pomodoro_get_short_break_duration() / 60);
+  }
+
+  Serial.print("Entering timer settings for ");
+  Serial.println(settingsLabel());
+  showSettingsScreen();
+}
+
+void adjustSettingsBy(int deltaMinutes) {
+  if (!settingsMode) {
+    return;
+  }
+
+  const int minVal = settingsForWork ? 10 : 5;
+  const int maxVal = settingsForWork ? 90 : 20;
+
+  int newValue = settingsMinutes + deltaMinutes;
+  if (newValue > maxVal) {
+    newValue = minVal;
+  } else if (newValue < minVal) {
+    newValue = maxVal;
+  }
+
+  settingsMinutes = newValue;
+  Serial.print("Adjusted ");
+  Serial.print(settingsLabel());
+  Serial.print(" duration to ");
+  Serial.print(settingsMinutes);
+  Serial.println(" minutes");
+  showSettingsScreen();
+}
+
+void confirmSettings() {
+  if (!settingsMode) {
+    return;
+  }
+
+  unsigned long seconds = static_cast<unsigned long>(settingsMinutes) * 60UL;
+
+  if (settingsForWork) {
+    pomodoro_set_work_duration(seconds);
+  } else {
+    pomodoro_set_short_break_duration(seconds);
+  }
+
+  Serial.print("Timer settings saved: ");
+  Serial.print(settingsLabel());
+  Serial.print(" set to ");
+  Serial.print(settingsMinutes);
+  Serial.println(" minutes");
+
+  selectedMode = settingsForWork ? MODE_WORK : MODE_BREAK;
+  settingsMode = false;
+  settingsRequireRelease = false;
+  button2SingleClickPending = false;
+  settingsReentryBlockUntil = millis() + 400; // short cooldown before re-entry
+  monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
+  lastPomodoroState = POMODORO_IDLE;
 }
 }  // namespace
 
@@ -63,7 +137,7 @@ bool userLost = false;
 // Shaking sensor monitoring (interrupt-based)
 volatile bool shakingDetected = false;
 unsigned long lastShakingTrigger = 0;
-const unsigned long shakingCooldown = 500; // 500ms cooldown between triggers
+const unsigned long shakingCooldown = 2000; // 2s cooldown between triggers for menu/gambling
 
 // Mode selection (when idle)
 IdleMode selectedMode = MODE_WORK;
@@ -73,6 +147,41 @@ bool mensaMenuMode = false;
 int mensaMenuIndex = 0;
 int mensaMenuTotal = 0;
 bool gamblingMode = false;
+
+static void handleButton2SingleAction(PomodoroState currentState) {
+  if (settingsMode) {
+    adjustSettingsBy(5);
+    return;
+  }
+
+  if (mensaMenuMode) {
+    if (mensaMenuIndex < mensaMenuTotal - 1) {
+      mensaMenuIndex++;
+      Serial.print("Next menu item: ");
+      Serial.println(mensaMenuIndex + 1);
+      monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
+    }
+    return;
+  }
+
+  if (currentState == POMODORO_IDLE) {
+    if (selectedMode == MODE_WORK) {
+      selectedMode = MODE_BREAK;
+      Serial.println("\n=== Mode: BREAK ===");
+    } else {
+      selectedMode = MODE_WORK;
+      Serial.println("\n=== Mode: WORK ===");
+    }
+    monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
+    return;
+  }
+
+  Serial.println("\n=== Resetting Timer ===");
+  pomodoro_reset();
+  lastPomodoroState = pomodoro_get_state();
+  userLost = false;
+  monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
+}
 
 // Interrupt handler for shaking sensor (must be IRAM_ATTR for ESP32)
 void IRAM_ATTR onShakingDetected() {
@@ -95,9 +204,6 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   noTone(BUZZER_PIN);
   buzzer_music_mario_init(BUZZER_PIN);
-  lights_init();
-  // Debug: blink both LEDs during startup.
-  lights_blink_both();
   buzzer_play_sound_turn_on(BUZZER_PIN);
   gambling_init();
 
@@ -151,7 +257,6 @@ void setup() {
   // Initialize pomodoro timer
   pomodoro_init();
   lastPomodoroState = pomodoro_get_state();
-  updateLightsForState(lastPomodoroState);
 
   Serial.println("Pomodoro Timer Initialized");
   Serial.println("BTN1 (D5): Start/Pause");
@@ -167,205 +272,240 @@ void setup() {
 }
 
 void loop() {
-  // Update the pomodoro timer
   pomodoro_update();
+  unsigned long now = millis();
 
-  // Read button states
   bool button1State = digitalRead(BUTTON1_PIN);
   bool button2State = digitalRead(BUTTON2_PIN);
 
   PomodoroState currentState = pomodoro_get_state();
+
   if (currentState != lastPomodoroState) {
-    updateLightsForState(currentState);
     lastPomodoroState = currentState;
   }
 
-  // Check if both buttons are pressed (for exiting menu/gambling modes)
-  if (mensaMenuMode && button1State == LOW && button2State == LOW) {
-    if (millis() - lastButton1Press > debounceDelay && millis() - lastButton2Press > debounceDelay) {
-      bool wasGambling = gamblingMode || gambling_choice_pending();
-      if (wasGambling) {
-        Serial.println("\n=== Exiting Gambling Mode ===");
-      } else {
-        Serial.println("\n=== Exiting Mensa Menu Mode ===");
-      }
-      mensaMenuMode = false;
-      gambling_reset();
-      gamblingMode = false;
+  if (settingsMode && shakingDetected) {
+    shakingDetected = false;
+  }
 
-      // Restore previous screen state
-      if (currentState == POMODORO_IDLE) {
-        monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
-      } else {
-        monitor_show_running_screen(pomodoro_get_state(),
-                                    pomodoro_get_time_remaining(),
-                                    pomodoro_get_completed_count());
-      }
-      // Ensure lights reflect the active Pomodoro state.
-      updateLightsForState(currentState);
-      lastPomodoroState = currentState;
+  bool gamblingChoiceActive = gamblingMode && gambling_choice_pending();
+  bool bothPressed = (button1State == LOW && button2State == LOW);
+  bool bothDebounced = (now - lastButton1Press > debounceDelay &&
+                        now - lastButton2Press > debounceDelay);
 
-      lastButton1Press = millis();
-      lastButton2Press = millis();
-      button1LastState = button1State;
-      button2LastState = button2State;
-      // Skip further button handling this loop to avoid false triggers.
-      return;
+  bool doubleClickContext = (!settingsMode &&
+                             !mensaMenuMode &&
+                             !gamblingMode &&
+                             !gambling_choice_pending() &&
+                             currentState == POMODORO_IDLE);
+  if (doubleClickContext && now < settingsReentryBlockUntil) {
+    doubleClickContext = false;
+  }
+
+  if (button2SingleClickPending) {
+    if (!doubleClickContext || (now - button2FirstClickTime > doubleClickInterval)) {
+      button2SingleClickPending = false;
+      handleButton2SingleAction(currentState);
+      currentState = pomodoro_get_state();
+      gamblingChoiceActive = gamblingMode && gambling_choice_pending();
+      doubleClickContext = (!settingsMode &&
+                            !mensaMenuMode &&
+                            !gamblingMode &&
+                            !gambling_choice_pending() &&
+                            currentState == POMODORO_IDLE);
+      if (doubleClickContext && now < settingsReentryBlockUntil) {
+        doubleClickContext = false;
+      }
     }
   }
-  // Button 1: Previous menu item (in mensa mode) or Start/Pause (normal mode)
-  else if (button1State == LOW && button1LastState == HIGH) {
-    if (millis() - lastButton1Press > debounceDelay) {
 
-      if (gamblingMode && gambling_choice_pending()) {
-        bool win = false;
-        if (gambling_register_choice(GamblingChoice::Red, &win)) {
-          Serial.println("\n=== Gambling Choice: RED ===");
-          lights_show_work();
-          monitor_gambling_show_result(GamblingChoice::Red, win);
-          if (win) {
-            Serial.println("Result: WIN! Mario theme incoming...");
-            buzzer_music_mario_play_overworld();
-          } else {
-            Serial.println("Result: LOSS. Better luck next time.");
-            buzzer_play_sound_sad1(BUZZER_PIN);
-          }
-          delay(1500);
-          gambling_reset();
-          gamblingMode = false;
-          if (mensaMenuMode) {
-            monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
-          }
-          PomodoroState refreshedState = pomodoro_get_state();
-          updateLightsForState(refreshedState);
-          lastPomodoroState = refreshedState;
+  if (settingsMode && settingsRequireRelease && button1State == HIGH && button2State == HIGH) {
+    settingsRequireRelease = false;
+  }
+
+  if (settingsMode && !settingsRequireRelease && bothPressed && bothDebounced) {
+    confirmSettings();
+    lastButton1Press = now;
+    lastButton2Press = now;
+    button1LastState = button1State;
+    button2LastState = button2State;
+    return;
+  }
+
+  if (!settingsMode &&
+      (mensaMenuMode || gamblingMode || gambling_choice_pending()) &&
+      bothPressed && bothDebounced) {
+    bool wasGambling = gamblingMode || gambling_choice_pending();
+    if (wasGambling) {
+      Serial.println("\n=== Exiting Gambling Mode ===");
+    } else {
+      Serial.println("\n=== Exiting Mensa Menu Mode ===");
+    }
+    mensaMenuMode = false;
+    gambling_reset();
+    gamblingMode = false;
+
+    settingsReentryBlockUntil = now + 400;
+    if (currentState == POMODORO_IDLE) {
+      monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
+    } else {
+      monitor_show_running_screen(pomodoro_get_state(),
+                                  pomodoro_get_time_remaining(),
+                                  pomodoro_get_completed_count());
+    }
+    lastPomodoroState = currentState;
+    button2SingleClickPending = false;
+
+    lastButton1Press = now;
+    lastButton2Press = now;
+    button1LastState = button1State;
+    button2LastState = button2State;
+    return;
+  }
+
+  if (!settingsMode && !mensaMenuMode && !gamblingMode &&
+      !gambling_choice_pending() && currentState == POMODORO_IDLE &&
+      now >= settingsReentryBlockUntil &&
+      bothPressed && bothDebounced) {
+    enterSettingsMode(selectedMode);
+    lastButton1Press = now;
+    lastButton2Press = now;
+    button1LastState = button1State;
+    button2LastState = button2State;
+    return;
+  }
+
+  if (button1State == LOW && button1LastState == HIGH &&
+      now - lastButton1Press > debounceDelay) {
+    if (settingsMode) {
+      adjustSettingsBy(-5);
+    } else if (gamblingChoiceActive) {
+      bool win = false;
+      if (gambling_register_choice(GamblingChoice::Red, &win)) {
+        Serial.println("\n=== Gambling Choice: RED ===");
+        lights_show_work();
+        monitor_gambling_show_result(GamblingChoice::Red, win);
+        if (win) {
+          Serial.println("Result: WIN! Mario theme incoming...");
+          buzzer_music_mario_play_overworld();
+        } else {
+          Serial.println("Result: LOSS. Better luck next time.");
+          buzzer_play_sound_sad1(BUZZER_PIN);
         }
-        lastButton1Press = millis();
-        button1LastState = button1State;
-        return;
-      }
-
-      if (mensaMenuMode) {
-        // Navigate to previous menu item
-        if (mensaMenuIndex > 0) {
-          mensaMenuIndex--;
-          Serial.print("Previous menu item: ");
-          Serial.println(mensaMenuIndex + 1);
+        delay(1500);
+        gambling_reset();
+        gamblingMode = false;
+        if (mensaMenuMode) {
           monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
         }
-      } else if (currentState == POMODORO_IDLE) {
-        // Start selected mode
-        if (selectedMode == MODE_WORK) {
-          Serial.println("\n=== Starting Work Session ===");
-          pomodoro_start_work();
-          lastPomodoroState = pomodoro_get_state();
-          updateLightsForState(lastPomodoroState);
-          // Measure initial distance when work session starts
-          ultrasound_measure_initial_distance();
-          // Reset ultrasound monitoring
-          ultrasoundCheckCount = 0;
-          userLost = false;
-          lastUltrasoundCheck = millis();
-        } else {
-          Serial.println("\n=== Starting Break ===");
-          pomodoro_start_break();
-          lastPomodoroState = pomodoro_get_state();
-          updateLightsForState(lastPomodoroState);
-        }
-        monitor_show_running_screen(pomodoro_get_state(),
-                                    pomodoro_get_time_remaining(),
-                                    pomodoro_get_completed_count());
-      } else if (currentState == POMODORO_WORK ||
-                 currentState == POMODORO_SHORT_BREAK ||
-                 currentState == POMODORO_LONG_BREAK) {
-        // Pause
-        Serial.println("\n=== Pausing Timer ===");
-        pomodoro_pause();
-        lastPomodoroState = pomodoro_get_state();
-        updateLightsForState(lastPomodoroState);
-        monitor_show_running_screen(pomodoro_get_state(),
-                                    pomodoro_get_time_remaining(),
-                                    pomodoro_get_completed_count());
-      } else if (currentState == POMODORO_PAUSED) {
-        // Resume
-        Serial.println("\n=== Resuming Timer ===");
-        pomodoro_resume();
-        lastPomodoroState = pomodoro_get_state();
-        updateLightsForState(lastPomodoroState);
-        // Reset lost flag when resuming
-        userLost = false;
-        monitor_show_running_screen(pomodoro_get_state(),
-                                    pomodoro_get_time_remaining(),
-                                    pomodoro_get_completed_count());
+        PomodoroState refreshedState = pomodoro_get_state();
+        lastPomodoroState = refreshedState;
       }
-
-      lastButton1Press = millis();
+    } else if (mensaMenuMode) {
+      if (mensaMenuIndex > 0) {
+        mensaMenuIndex--;
+        Serial.print("Previous menu item: ");
+        Serial.println(mensaMenuIndex + 1);
+        monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
+      }
+    } else if (currentState == POMODORO_IDLE) {
+      if (selectedMode == MODE_WORK) {
+        Serial.println("\n=== Starting Work Session ===");
+        pomodoro_start_work();
+        lastPomodoroState = pomodoro_get_state();
+        ultrasound_measure_initial_distance();
+        ultrasoundCheckCount = 0;
+        userLost = false;
+        lastUltrasoundCheck = now;
+      } else {
+        Serial.println("\n=== Starting Break ===");
+        pomodoro_start_break();
+        lastPomodoroState = pomodoro_get_state();
+      }
+      monitor_show_running_screen(pomodoro_get_state(),
+                                  pomodoro_get_time_remaining(),
+                                  pomodoro_get_completed_count());
+    } else if (currentState == POMODORO_WORK ||
+               currentState == POMODORO_SHORT_BREAK ||
+               currentState == POMODORO_LONG_BREAK) {
+      Serial.println("\n=== Pausing Timer ===");
+      pomodoro_pause();
+      lastPomodoroState = pomodoro_get_state();
+      monitor_show_running_screen(pomodoro_get_state(),
+                                  pomodoro_get_time_remaining(),
+                                  pomodoro_get_completed_count());
+    } else if (currentState == POMODORO_PAUSED) {
+      Serial.println("\n=== Resuming Timer ===");
+      pomodoro_resume();
+      lastPomodoroState = pomodoro_get_state();
+      userLost = false;
+      monitor_show_running_screen(pomodoro_get_state(),
+                                  pomodoro_get_time_remaining(),
+                                  pomodoro_get_completed_count());
     }
+
+    lastButton1Press = now;
+    currentState = pomodoro_get_state();
+    gamblingChoiceActive = gamblingMode && gambling_choice_pending();
   }
   button1LastState = button1State;
 
-  // Button 2: Next menu item (in mensa mode) or Toggle mode/Reset (normal mode)
-  if (button2State == LOW && button2LastState == HIGH) {
-    if (millis() - lastButton2Press > debounceDelay) {
-
-      if (gamblingMode && gambling_choice_pending()) {
-        bool win = false;
-        if (gambling_register_choice(GamblingChoice::Black, &win)) {
-          Serial.println("\n=== Gambling Choice: BLACK ===");
-          lights_show_break();
-          monitor_gambling_show_result(GamblingChoice::Black, win);
-          if (win) {
-            Serial.println("Result: WIN! Mario theme incoming...");
-            buzzer_music_mario_play_overworld();
-          } else {
-            Serial.println("Result: LOSS. Better luck next time.");
-            buzzer_play_sound_sad1(BUZZER_PIN);
-          }
-          delay(1500);
-          gambling_reset();
-          gamblingMode = false;
-          if (mensaMenuMode) {
-            monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
-          }
-          PomodoroState refreshedState = pomodoro_get_state();
-          updateLightsForState(refreshedState);
-          lastPomodoroState = refreshedState;
+  if (button2State == LOW && button2LastState == HIGH &&
+      now - lastButton2Press > debounceDelay) {
+    if (settingsMode) {
+      adjustSettingsBy(5);
+    } else if (gamblingChoiceActive) {
+      bool win = false;
+      if (gambling_register_choice(GamblingChoice::Black, &win)) {
+        Serial.println("\n=== Gambling Choice: BLACK ===");
+        lights_show_break();
+        monitor_gambling_show_result(GamblingChoice::Black, win);
+        if (win) {
+          Serial.println("Result: WIN! Mario theme incoming...");
+          buzzer_music_mario_play_overworld();
+        } else {
+          Serial.println("Result: LOSS. Better luck next time.");
+          buzzer_play_sound_sad1(BUZZER_PIN);
         }
-        lastButton2Press = millis();
-        button2LastState = button2State;
-        return;
-      }
-
-      if (mensaMenuMode) {
-        // Navigate to next menu item
-        if (mensaMenuIndex < mensaMenuTotal - 1) {
-          mensaMenuIndex++;
-          Serial.print("Next menu item: ");
-          Serial.println(mensaMenuIndex + 1);
+        delay(1500);
+        gambling_reset();
+        gamblingMode = false;
+        if (mensaMenuMode) {
           monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
         }
-      } else if (currentState == POMODORO_IDLE) {
-        // Toggle between WORK and BREAK
-        if (selectedMode == MODE_WORK) {
-          selectedMode = MODE_BREAK;
-          Serial.println("\n=== Mode: BREAK ===");
-        } else {
-          selectedMode = MODE_WORK;
-          Serial.println("\n=== Mode: WORK ===");
+          PomodoroState refreshedState = pomodoro_get_state();
+          lastPomodoroState = refreshedState;
         }
-        monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
-      } else {
-        // Reset to idle when running
-        Serial.println("\n=== Resetting Timer ===");
-        pomodoro_reset();
-        lastPomodoroState = pomodoro_get_state();
-        updateLightsForState(lastPomodoroState);
-        // Reset lost flag when resetting timer
-        userLost = false;
-        monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
+    } else if (mensaMenuMode) {
+      if (mensaMenuIndex < mensaMenuTotal - 1) {
+        mensaMenuIndex++;
+        Serial.print("Next menu item: ");
+        Serial.println(mensaMenuIndex + 1);
+        monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
       }
+    } else if (doubleClickContext && now >= settingsReentryBlockUntil) {
+      if (button2SingleClickPending && (now - button2FirstClickTime <= doubleClickInterval)) {
+        button2SingleClickPending = false;
+        enterSettingsMode(selectedMode);
+      } else {
+        button2SingleClickPending = true;
+        button2FirstClickTime = now;
+      }
+    } else {
+      handleButton2SingleAction(currentState);
+      button2SingleClickPending = false;
+    }
 
-      lastButton2Press = millis();
+    lastButton2Press = now;
+    currentState = pomodoro_get_state();
+    gamblingChoiceActive = gamblingMode && gambling_choice_pending();
+    doubleClickContext = (!settingsMode &&
+                          !mensaMenuMode &&
+                          !gamblingMode &&
+                          !gambling_choice_pending() &&
+                          currentState == POMODORO_IDLE);
+    if (doubleClickContext && now < settingsReentryBlockUntil) {
+      doubleClickContext = false;
     }
   }
   button2LastState = button2State;
@@ -412,7 +552,6 @@ void loop() {
           // Pause the pomodoro timer
           pomodoro_pause();
           lastPomodoroState = pomodoro_get_state();
-          updateLightsForState(lastPomodoroState);
           Serial.println("Timer paused due to user out of range");
 
           // Play sad tone to indicate user left the workspace
@@ -436,7 +575,6 @@ void loop() {
           // Resume the pomodoro timer
           pomodoro_resume();
           lastPomodoroState = pomodoro_get_state();
-          updateLightsForState(lastPomodoroState);
           Serial.println("Timer resumed - user back in range");
 
           // Play happy tone to celebrate the user's return
@@ -457,7 +595,7 @@ void loop() {
   }
 
   // Check shaking sensor (interrupt-based - instant response!)
-  if (shakingDetected && (millis() - lastShakingTrigger >= shakingCooldown) && !mensaMenuMode) {
+  if (!settingsMode && shakingDetected && (millis() - lastShakingTrigger >= shakingCooldown) && !mensaMenuMode && !gamblingMode) {
     shakingDetected = false; // Reset flag
 
     Serial.println("!!! SHAKING DETECTED (INSTANT) !!!");
@@ -480,7 +618,7 @@ void loop() {
     // Update last trigger time for cooldown
     lastShakingTrigger = millis();
   }
-  else if (shakingDetected && (millis() - lastShakingTrigger >= shakingCooldown) && mensaMenuMode && !gamblingMode && !gambling_choice_pending()) {
+  else if (!settingsMode && shakingDetected && (millis() - lastShakingTrigger >= shakingCooldown) && mensaMenuMode && !gamblingMode && !gambling_choice_pending()) {
     shakingDetected = false;
     lastShakingTrigger = millis();
 
@@ -494,7 +632,7 @@ void loop() {
   }
 
   // Update display periodically (only when not in mensa menu mode)
-  if (!mensaMenuMode) {
+  if (!settingsMode && !mensaMenuMode) {
     if (currentState == POMODORO_IDLE) {
       // Idle screen: update more frequently for smooth scrolling
       if (millis() - lastDisplayUpdate >= idleDisplayUpdateInterval) {

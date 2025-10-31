@@ -2,15 +2,20 @@
 
 // Global state variables
 static PomodoroState currentState = POMODORO_IDLE;
+static PomodoroState pausedSourceState = POMODORO_IDLE;
 static unsigned long timeRemaining = 0;
 static unsigned long lastUpdateTime = 0;
 static int completedPomodoros = 0;
 static bool isRunning = false;
 static bool timerFinished = false;
+static unsigned long workDuration = WORK_DURATION;
+static unsigned long shortBreakDuration = SHORT_BREAK_DURATION;
+static unsigned long longBreakDuration = LONG_BREAK_DURATION;
 
 // Initialize the pomodoro timer
 void pomodoro_init() {
   currentState = POMODORO_IDLE;
+  pausedSourceState = POMODORO_IDLE;
   timeRemaining = 0;
   lastUpdateTime = millis();
   completedPomodoros = 0;
@@ -23,12 +28,14 @@ void pomodoro_init() {
 // Start a work session
 void pomodoro_start_work() {
   currentState = POMODORO_WORK;
-  timeRemaining = WORK_DURATION;
+  timeRemaining = workDuration;
   lastUpdateTime = millis();
   isRunning = true;
   timerFinished = false;
 
-  Serial.println("Starting work session (25 minutes)");
+  Serial.print("Starting work session (");
+  Serial.print(workDuration / 60);
+  Serial.println(" minutes)");
   Serial.print("Completed pomodoros: ");
   Serial.println(completedPomodoros);
 }
@@ -38,12 +45,16 @@ void pomodoro_start_break() {
   // Determine if it's time for a long break
   if (completedPomodoros > 0 && completedPomodoros % POMODOROS_UNTIL_LONG_BREAK == 0) {
     currentState = POMODORO_LONG_BREAK;
-    timeRemaining = LONG_BREAK_DURATION;
-    Serial.println("Starting long break (15 minutes)");
+    timeRemaining = longBreakDuration;
+    Serial.print("Starting long break (");
+    Serial.print(longBreakDuration / 60);
+    Serial.println(" minutes)");
   } else {
     currentState = POMODORO_SHORT_BREAK;
-    timeRemaining = SHORT_BREAK_DURATION;
-    Serial.println("Starting short break (5 minutes)");
+    timeRemaining = shortBreakDuration;
+    Serial.print("Starting short break (");
+    Serial.print(shortBreakDuration / 60);
+    Serial.println(" minutes)");
   }
 
   lastUpdateTime = millis();
@@ -55,6 +66,7 @@ void pomodoro_start_break() {
 void pomodoro_pause() {
   if (isRunning && currentState != POMODORO_IDLE) {
     isRunning = false;
+    pausedSourceState = currentState;
     currentState = POMODORO_PAUSED;
     Serial.println("Timer paused");
   }
@@ -65,8 +77,12 @@ void pomodoro_resume() {
   if (currentState == POMODORO_PAUSED) {
     isRunning = true;
     lastUpdateTime = millis();
-    // Restore the previous state (this is simplified - you might want to track previous state)
-    currentState = POMODORO_WORK; // Default to work
+    if (pausedSourceState != POMODORO_IDLE) {
+      currentState = pausedSourceState;
+    } else {
+      currentState = POMODORO_WORK;
+    }
+    pausedSourceState = POMODORO_IDLE;
     Serial.println("Timer resumed");
   }
 }
@@ -78,6 +94,7 @@ void pomodoro_reset() {
   isRunning = false;
   timerFinished = false;
   completedPomodoros = 0;
+  pausedSourceState = POMODORO_IDLE;
 
   Serial.println("Timer reset");
   Serial.println("Pomodoros reset to 0");
@@ -110,9 +127,11 @@ void pomodoro_update() {
         Serial.print("Total completed pomodoros: ");
         Serial.println(completedPomodoros);
         currentState = POMODORO_IDLE;
+        pausedSourceState = POMODORO_IDLE;
       } else if (currentState == POMODORO_SHORT_BREAK || currentState == POMODORO_LONG_BREAK) {
         Serial.println("Break completed!");
         currentState = POMODORO_IDLE;
+        pausedSourceState = POMODORO_IDLE;
       }
     }
   }
@@ -158,6 +177,47 @@ String pomodoro_get_state_string() {
     default:
       return "Unknown";
   }
+}
+
+void pomodoro_set_work_duration(unsigned long seconds) {
+  if (seconds == 0) return;
+  workDuration = seconds;
+}
+
+void pomodoro_set_short_break_duration(unsigned long seconds) {
+  if (seconds == 0) return;
+  shortBreakDuration = seconds;
+}
+
+void pomodoro_set_long_break_duration(unsigned long seconds) {
+  if (seconds == 0) return;
+  longBreakDuration = seconds;
+}
+
+unsigned long pomodoro_get_work_duration() {
+  return workDuration;
+}
+
+unsigned long pomodoro_get_short_break_duration() {
+  return shortBreakDuration;
+}
+
+unsigned long pomodoro_get_long_break_duration() {
+  return longBreakDuration;
+}
+
+void pomodoro_set_time_remaining(unsigned long seconds) {
+  timeRemaining = seconds;
+  timerFinished = false;
+  lastUpdateTime = millis();
+}
+
+bool pomodoro_is_running() {
+  return isRunning;
+}
+
+PomodoroState pomodoro_get_paused_source_state() {
+  return pausedSourceState;
 }
 
 // Format time as MM:SS

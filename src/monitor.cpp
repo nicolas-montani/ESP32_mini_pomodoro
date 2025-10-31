@@ -728,6 +728,36 @@ void monitor_gambling_show_result(GamblingChoice choice, bool win) {
   display.display();
 }
 
+// Show time adjustment screen
+void monitor_show_time_adjustment(const char* label, int minutes) {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // Header
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Adjust Duration");
+  display.drawLine(0, 10, 127, 10, SSD1306_WHITE);
+
+  // Label (WORK/BREAK)
+  display.setTextSize(2);
+  display.setCursor(0, 16);
+  display.println(label);
+
+  // Minutes value
+  display.setTextSize(3);
+  display.setCursor(0, 36);
+  if (minutes < 10) {
+    display.print("0");
+  }
+  display.print(minutes);
+  display.setTextSize(1);
+  display.print(" min");
+
+
+  display.display();
+}
+
 // Show mensa menu with navigation
 void monitor_show_mensa_menu(int currentIndex, int totalItems) {
   display.clearDisplay();

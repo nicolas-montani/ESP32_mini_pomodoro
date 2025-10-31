@@ -54,6 +54,19 @@ bool pomodoro_is_finished();
 // Get state as string
 String pomodoro_get_state_string();
 
+// Duration configuration helpers (seconds)
+void pomodoro_set_work_duration(unsigned long seconds);
+void pomodoro_set_short_break_duration(unsigned long seconds);
+void pomodoro_set_long_break_duration(unsigned long seconds);
+unsigned long pomodoro_get_work_duration();
+unsigned long pomodoro_get_short_break_duration();
+unsigned long pomodoro_get_long_break_duration();
+
+// Runtime helpers
+void pomodoro_set_time_remaining(unsigned long seconds);
+bool pomodoro_is_running();
+PomodoroState pomodoro_get_paused_source_state();
+
 // Format time as MM:SS
 String pomodoro_format_time(unsigned long seconds);
 

@@ -30,6 +30,7 @@ void monitor_show_boot_screen();
 void monitor_show_mensa_menu(int currentIndex, int totalItems);
 void monitor_gambling_show_intro();
 void monitor_gambling_show_result(GamblingChoice choice, bool win);
+void monitor_show_time_adjustment(const char* label, int minutes);
 
 // Utility functions
 String monitor_format_time(unsigned long seconds);
