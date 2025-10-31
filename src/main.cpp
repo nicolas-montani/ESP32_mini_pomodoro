@@ -256,6 +256,10 @@ void exitSpecialModes() {
   settingsReentryBlockUntil = millis() + SETTINGS_REENTRY_COOLDOWN_MS;
   button2SingleClickPending = false;
 
+  // Reset shaking flag to prevent stale triggers
+  shakingDetected = false;
+  lastShakingTrigger = millis(); // Reset cooldown timer
+
   PomodoroState currentState = pomodoro_get_state();
   if (currentState == POMODORO_IDLE) {
     monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
@@ -573,11 +577,15 @@ void handleShakingSensor(unsigned long now) {
     currentAppMode = AppMode::GAMBLING;
     monitor_gambling_show_intro();
     lastShakingTrigger = now;
+    shakingDetected = false; // Ensure flag is cleared
   }
 }
 
 void updateDisplay(unsigned long now, PomodoroState currentState) {
-  if (currentAppMode == AppMode::SETTINGS || currentAppMode == AppMode::MENSA_MENU) {
+  // Don't update display when in special modes (they manage their own display)
+  if (currentAppMode == AppMode::SETTINGS ||
+      currentAppMode == AppMode::MENSA_MENU ||
+      currentAppMode == AppMode::GAMBLING) {
     return;
   }
 

@@ -6,11 +6,11 @@
 // ============================================================================
 
 #ifndef SDA_PIN
-#define SDA_PIN 21  // I2C Data pin
+#define SDA_PIN 22  // I2C Data pin
 #endif
 
 #ifndef SCL_PIN
-#define SCL_PIN 22  // I2C Clock pin
+#define SCL_PIN 21  // I2C Clock pin
 #endif
 
 // ============================================================================
