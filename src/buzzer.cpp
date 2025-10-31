@@ -1,8 +1,10 @@
 #include <Arduino.h>
 #include "buzzer.h"
-#include "lights.h"
 
 namespace {
+// Default buzzer pin
+uint8_t buzzerPin = 13;
+
 struct ToneStep {
   int frequency;
   int durationMs;
@@ -50,67 +52,44 @@ constexpr ToneStep turnOnTone[] = {
     {NOTE_G5, 220, 120},
 };
 
-enum class LightBlink {
-  None,
-  Green,
-  Red,
-};
-
 template <size_t N>
-void playSequence(int buzzerPin, const ToneStep (&steps)[N], LightBlink blinkMode = LightBlink::None) {
-  LightsState savedState = lights_capture_state();
+void playSequence(const ToneStep (&steps)[N]) {
   for (const auto& step : steps) {
     tone(buzzerPin, step.frequency, step.durationMs);
-    switch (blinkMode) {
-      case LightBlink::Green:
-        lights_green_on();
-        break;
-      case LightBlink::Red:
-        lights_red_on();
-        break;
-      case LightBlink::None:
-      default:
-        break;
-    }
     delay(step.durationMs);
     noTone(buzzerPin);
-    switch (blinkMode) {
-      case LightBlink::Green:
-        lights_green_off();
-        break;
-      case LightBlink::Red:
-        lights_red_off();
-        break;
-      case LightBlink::None:
-      default:
-        break;
-    }
     if (step.pauseMs > 0) {
       delay(step.pauseMs);
     }
   }
-  lights_apply_state(savedState);
 }
 }  // namespace
 
-void buzzer_play_sound_happy1(int buzzerPin) {
-  playSequence(buzzerPin, happyTone1, LightBlink::Green);
+// Initialize the buzzer
+void buzzer_init(uint8_t pin) {
+  buzzerPin = pin;
+  pinMode(buzzerPin, OUTPUT);
+  noTone(buzzerPin);
 }
 
-void buzzer_play_sound_happy2(int buzzerPin) {
-  playSequence(buzzerPin, happyTone2, LightBlink::Green);
+void buzzer_play_sound_happy1() {
+  playSequence(happyTone1);
 }
 
-void buzzer_play_sound_sad1(int buzzerPin) {
-  playSequence(buzzerPin, sadTone1, LightBlink::Red);
+void buzzer_play_sound_happy2() {
+  playSequence(happyTone2);
 }
 
-void buzzer_play_sound_sad2(int buzzerPin) {
-  playSequence(buzzerPin, sadTone2, LightBlink::Red);
+void buzzer_play_sound_sad1() {
+  playSequence(sadTone1);
 }
 
-void buzzer_play_sound_turn_on(int buzzerPin) {
-  playSequence(buzzerPin, turnOnTone, LightBlink::Green);
+void buzzer_play_sound_sad2() {
+  playSequence(sadTone2);
+}
+
+void buzzer_play_sound_turn_on() {
+  playSequence(turnOnTone);
 }
 
 // ===== Mario Music Notes =====
@@ -193,12 +172,6 @@ void buzzer_play_sound_turn_on(int buzzerPin) {
 #define NOTE_D8  4699
 #define NOTE_DS8 4978
 
-// ===== Pins for Mario Music =====
-namespace {
-
-uint8_t marioBuzzerPin = 13;  // buzzer (configurable via buzzer_music_mario_init)
-
-}
 
 // ===== Mario main theme =====
 int marioMelody[] = {
@@ -324,7 +297,7 @@ void buzzer_music_mario_play_overworld() {
   int size = sizeof(marioMelody) / sizeof(int);
   for (int i = 0; i < size; i++) {
     int noteDuration = 1000 / marioTempo[i];      // e.g., 1000/4 = quarter
-    buzzer_play_music_with_light(marioBuzzerPin, marioMelody[i], noteDuration);
+    buzzer_play_music_with_light(buzzerPin, marioMelody[i], noteDuration);
     delay((int)(noteDuration * 0.30));            // small gap
   }
 }
@@ -333,13 +306,7 @@ void buzzer_music_mario_play_underworld() {
   int size = sizeof(underworld_melody) / sizeof(int);
   for (int i = 0; i < size; i++) {
     int noteDuration = 1000 / underworld_tempo[i];
-    buzzer_play_music_with_light(marioBuzzerPin, underworld_melody[i], noteDuration);
+    buzzer_play_music_with_light(buzzerPin, underworld_melody[i], noteDuration);
     delay((int)(noteDuration * 0.30));
   }
-}
-
-// ===== Setup =====
-void buzzer_music_mario_init(uint8_t buzzerPin) {
-  marioBuzzerPin = buzzerPin;
-  pinMode(marioBuzzerPin, OUTPUT);
 }

@@ -6,6 +6,7 @@
 #include "shaking.h"
 #include "request.h"
 #include "gambling.h"
+#include "lights.h"
 
 extern IdleMode selectedMode;
 
@@ -201,11 +202,13 @@ void setup() {
   // Initialize pins FIRST
   pinMode(BUTTON1_PIN, INPUT_PULLUP);
   pinMode(BUTTON2_PIN, INPUT_PULLUP);
-  pinMode(BUZZER_PIN, OUTPUT);
-  noTone(BUZZER_PIN);
-  buzzer_music_mario_init(BUZZER_PIN);
-  buzzer_play_sound_turn_on(BUZZER_PIN);
-  gambling_init();
+
+  // Initialize buzzer
+  buzzer_init(BUZZER_PIN);
+  buzzer_play_sound_turn_on();
+
+  // Initialize LED lights
+  lights_init();
 
   // Initialize monitor (display) early
   if (!monitor_init(SDA_PIN, SCL_PIN)) {
@@ -228,8 +231,8 @@ void setup() {
   if (request_init(WIFI_SSID, WIFI_PASSWORD)) {
     Serial.println(">>> WiFi connected successfully!\n");
     // Play happy sound on successful connection
-    buzzer_play_sound_happy1(BUZZER_PIN);
-
+    buzzer_play_sound_happy1();
+    light_alternate_3sec();
     // Fetch mensa menu
     Serial.println(">>> Fetching Mensa Menu...");
     request_fetch_mensa_menu();
@@ -237,13 +240,13 @@ void setup() {
   } else {
     Serial.println(">>> WiFi connection failed! Continuing without WiFi...\n");
     // Play sad sound on failed connection
-    buzzer_play_sound_sad1(BUZZER_PIN);
+    buzzer_play_sound_sad1();
   }
   
   //monitor_roboeyes_show_return() ;
   //monitor_roboeyes_show_lost();
 
-
+  gambling_init();
   // Initialize ultrasound sensor
   ultrasound_init();
 
@@ -256,6 +259,7 @@ void setup() {
 
   // Initialize pomodoro timer
   pomodoro_init();
+  
   lastPomodoroState = pomodoro_get_state();
 
   Serial.println("Pomodoro Timer Initialized");
@@ -383,14 +387,14 @@ void loop() {
       bool win = false;
       if (gambling_register_choice(GamblingChoice::Red, &win)) {
         Serial.println("\n=== Gambling Choice: RED ===");
-        lights_show_work();
+
         monitor_gambling_show_result(GamblingChoice::Red, win);
         if (win) {
           Serial.println("Result: WIN! Mario theme incoming...");
           buzzer_music_mario_play_overworld();
         } else {
           Serial.println("Result: LOSS. Better luck next time.");
-          buzzer_play_sound_sad1(BUZZER_PIN);
+          buzzer_play_sound_sad1();
         }
         delay(1500);
         gambling_reset();
@@ -458,14 +462,14 @@ void loop() {
       bool win = false;
       if (gambling_register_choice(GamblingChoice::Black, &win)) {
         Serial.println("\n=== Gambling Choice: BLACK ===");
-        lights_show_break();
+
         monitor_gambling_show_result(GamblingChoice::Black, win);
         if (win) {
           Serial.println("Result: WIN! Mario theme incoming...");
           buzzer_music_mario_play_overworld();
         } else {
           Serial.println("Result: LOSS. Better luck next time.");
-          buzzer_play_sound_sad1(BUZZER_PIN);
+          buzzer_play_sound_sad1();
         }
         delay(1500);
         gambling_reset();
@@ -513,7 +517,7 @@ void loop() {
   // Check if timer finished
   if (pomodoro_is_finished()) {
     Serial.println("\n=== Timer Finished! ===");
-    buzzer_play_sound_happy1(BUZZER_PIN);
+    buzzer_play_sound_happy1();
     monitor_show_finished_screen(pomodoro_get_completed_count());
     delay(3000);
     monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
@@ -555,7 +559,7 @@ void loop() {
           Serial.println("Timer paused due to user out of range");
 
           // Play sad tone to indicate user left the workspace
-          buzzer_play_sound_sad1(BUZZER_PIN);
+          buzzer_play_sound_sad1();
 
           // Show the "lost" animation
           monitor_roboeyes_show_lost();
@@ -578,7 +582,7 @@ void loop() {
           Serial.println("Timer resumed - user back in range");
 
           // Play happy tone to celebrate the user's return
-          buzzer_play_sound_happy1(BUZZER_PIN);
+          buzzer_play_sound_happy1();
 
           // Return to running screen after animation
           monitor_show_running_screen(pomodoro_get_state(),
@@ -628,7 +632,6 @@ void loop() {
     gambling_start();
     gamblingMode = true;
     monitor_gambling_show_intro();
-    lights_blink_both(2, 120, 120);
   }
 
   // Update display periodically (only when not in mensa menu mode)

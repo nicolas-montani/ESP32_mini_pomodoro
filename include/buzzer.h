@@ -3,37 +3,37 @@
 #include <Arduino.h>
 
 /**
- * Plays a short "happy" jingle variation on the provided buzzer pin.
+ * Initializes the buzzer pin.
+ * Must be called before playing any sounds.
+ *
+ * @param pin The pin connected to the buzzer (default: 13)
  */
-void buzzer_play_sound_happy1(int buzzerPin);
+void buzzer_init(uint8_t pin = 13);
 
 /**
- * Plays an alternate short "happy" jingle variation on the provided buzzer pin.
+ * Plays a short "happy" jingle variation.
  */
-void buzzer_play_sound_happy2(int buzzerPin);
+void buzzer_play_sound_happy1();
 
 /**
- * Plays a short "sad" jingle variation on the provided buzzer pin.
+ * Plays an alternate short "happy" jingle variation.
  */
-void buzzer_play_sound_sad1(int buzzerPin);
+void buzzer_play_sound_happy2();
 
 /**
- * Plays an alternate short "sad" jingle variation on the provided buzzer pin.
+ * Plays a short "sad" jingle variation.
  */
-void buzzer_play_sound_sad2(int buzzerPin);
+void buzzer_play_sound_sad1();
+
+/**
+ * Plays an alternate short "sad" jingle variation.
+ */
+void buzzer_play_sound_sad2();
 
 /**
  * Plays the startup sound when the device powers on.
  */
-void buzzer_play_sound_turn_on(int buzzerPin);
-
-/**
- * Initializes the buzzer pin for Mario theme music.
- * Must be called before playing any Mario music.
- *
- * @param buzzerPin The pin connected to the buzzer (default: 13)
- */
-void buzzer_music_mario_init(uint8_t buzzerPin = 13);
+void buzzer_play_sound_turn_on();
 
 /**
  * Plays the Mario overworld theme once on the configured buzzer pin.
