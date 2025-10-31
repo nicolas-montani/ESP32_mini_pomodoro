@@ -674,6 +674,60 @@ void monitor_roboeyes_show_shake() {
   delay(1500); // Hold the final message for 1.5 seconds
 }
 
+// Show gambling intro screen
+void monitor_gambling_show_intro() {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // Header
+  display.setTextSize(2);
+  display.setCursor(10, 4);
+  display.println("GAMBLE");
+  display.drawLine(0, 20, 127, 20, SSD1306_WHITE);
+
+  // Instructions
+  display.setTextSize(1);
+  display.setCursor(0, 26);
+  display.println("Shake to play - place your bet!");
+  display.setCursor(0, 40);
+  display.println("BTN1: RED        BTN2: BLACK");
+
+  display.setCursor(0, 56);
+  display.println("Both buttons to exit");
+
+  display.display();
+}
+
+// Show gambling result screen
+void monitor_gambling_show_result(GamblingChoice choice, bool win) {
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+
+  // Result header
+  display.setTextSize(2);
+  display.setCursor(0, 4);
+  if (win) {
+    display.println("YOU WIN");
+  } else {
+    display.println("YOU LOSE");
+  }
+  display.drawLine(0, 24, 127, 24, SSD1306_WHITE);
+
+  // Choice and prompt
+  display.setTextSize(1);
+  display.setCursor(0, 32);
+  display.print("Your choice: ");
+  display.println(choice == GamblingChoice::Red ? "RED" : "BLACK");
+
+  display.setCursor(0, 46);
+  display.println(win ? "Enjoy the reward!" : "Try again soon!");
+
+  display.setCursor(0, 56);
+  display.println("Shake to play again");
+
+  display.display();
+}
+
 // Show mensa menu with navigation
 void monitor_show_mensa_menu(int currentIndex, int totalItems) {
   display.clearDisplay();
@@ -766,4 +820,3 @@ void monitor_show_mensa_menu(int currentIndex, int totalItems) {
 
   display.display();
 }
-

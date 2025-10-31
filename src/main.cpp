@@ -5,6 +5,27 @@
 #include "buzzer.h"
 #include "shaking.h"
 #include "request.h"
+#include "lights.h"
+#include "gambling.h"
+
+namespace {
+PomodoroState lastPomodoroState = POMODORO_IDLE;
+
+void updateLightsForState(PomodoroState state) {
+  switch (state) {
+    case POMODORO_WORK:
+      lights_show_work();
+      break;
+    case POMODORO_SHORT_BREAK:
+    case POMODORO_LONG_BREAK:
+      lights_show_break();
+      break;
+    default:
+      lights_show_idle();
+      break;
+  }
+}
+}  // namespace
 
 // Pin definitions
 #define SDA_PIN 21
@@ -51,6 +72,7 @@ IdleMode selectedMode = MODE_WORK;
 bool mensaMenuMode = false;
 int mensaMenuIndex = 0;
 int mensaMenuTotal = 0;
+bool gamblingMode = false;
 
 // Interrupt handler for shaking sensor (must be IRAM_ATTR for ESP32)
 void IRAM_ATTR onShakingDetected() {
@@ -72,6 +94,12 @@ void setup() {
   pinMode(BUTTON2_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
   noTone(BUZZER_PIN);
+  buzzer_music_mario_init(BUZZER_PIN);
+  lights_init();
+  // Debug: blink both LEDs during startup.
+  lights_blink_both();
+  buzzer_play_sound_turn_on(BUZZER_PIN);
+  gambling_init();
 
   // Initialize monitor (display) early
   if (!monitor_init(SDA_PIN, SCL_PIN)) {
@@ -122,6 +150,8 @@ void setup() {
 
   // Initialize pomodoro timer
   pomodoro_init();
+  lastPomodoroState = pomodoro_get_state();
+  updateLightsForState(lastPomodoroState);
 
   Serial.println("Pomodoro Timer Initialized");
   Serial.println("BTN1 (D5): Start/Pause");
@@ -145,12 +175,23 @@ void loop() {
   bool button2State = digitalRead(BUTTON2_PIN);
 
   PomodoroState currentState = pomodoro_get_state();
+  if (currentState != lastPomodoroState) {
+    updateLightsForState(currentState);
+    lastPomodoroState = currentState;
+  }
 
-  // Check if both buttons are pressed (for exiting mensa menu)
+  // Check if both buttons are pressed (for exiting menu/gambling modes)
   if (mensaMenuMode && button1State == LOW && button2State == LOW) {
     if (millis() - lastButton1Press > debounceDelay && millis() - lastButton2Press > debounceDelay) {
-      Serial.println("\n=== Exiting Mensa Menu Mode ===");
+      bool wasGambling = gamblingMode || gambling_choice_pending();
+      if (wasGambling) {
+        Serial.println("\n=== Exiting Gambling Mode ===");
+      } else {
+        Serial.println("\n=== Exiting Mensa Menu Mode ===");
+      }
       mensaMenuMode = false;
+      gambling_reset();
+      gamblingMode = false;
 
       // Restore previous screen state
       if (currentState == POMODORO_IDLE) {
@@ -160,14 +201,49 @@ void loop() {
                                     pomodoro_get_time_remaining(),
                                     pomodoro_get_completed_count());
       }
+      // Ensure lights reflect the active Pomodoro state.
+      updateLightsForState(currentState);
+      lastPomodoroState = currentState;
 
       lastButton1Press = millis();
       lastButton2Press = millis();
+      button1LastState = button1State;
+      button2LastState = button2State;
+      // Skip further button handling this loop to avoid false triggers.
+      return;
     }
   }
   // Button 1: Previous menu item (in mensa mode) or Start/Pause (normal mode)
   else if (button1State == LOW && button1LastState == HIGH) {
     if (millis() - lastButton1Press > debounceDelay) {
+
+      if (gamblingMode && gambling_choice_pending()) {
+        bool win = false;
+        if (gambling_register_choice(GamblingChoice::Red, &win)) {
+          Serial.println("\n=== Gambling Choice: RED ===");
+          lights_show_work();
+          monitor_gambling_show_result(GamblingChoice::Red, win);
+          if (win) {
+            Serial.println("Result: WIN! Mario theme incoming...");
+            buzzer_music_mario_play_overworld();
+          } else {
+            Serial.println("Result: LOSS. Better luck next time.");
+            buzzer_play_sound_sad1(BUZZER_PIN);
+          }
+          delay(1500);
+          gambling_reset();
+          gamblingMode = false;
+          if (mensaMenuMode) {
+            monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
+          }
+          PomodoroState refreshedState = pomodoro_get_state();
+          updateLightsForState(refreshedState);
+          lastPomodoroState = refreshedState;
+        }
+        lastButton1Press = millis();
+        button1LastState = button1State;
+        return;
+      }
 
       if (mensaMenuMode) {
         // Navigate to previous menu item
@@ -182,6 +258,8 @@ void loop() {
         if (selectedMode == MODE_WORK) {
           Serial.println("\n=== Starting Work Session ===");
           pomodoro_start_work();
+          lastPomodoroState = pomodoro_get_state();
+          updateLightsForState(lastPomodoroState);
           // Measure initial distance when work session starts
           ultrasound_measure_initial_distance();
           // Reset ultrasound monitoring
@@ -191,6 +269,8 @@ void loop() {
         } else {
           Serial.println("\n=== Starting Break ===");
           pomodoro_start_break();
+          lastPomodoroState = pomodoro_get_state();
+          updateLightsForState(lastPomodoroState);
         }
         monitor_show_running_screen(pomodoro_get_state(),
                                     pomodoro_get_time_remaining(),
@@ -201,6 +281,8 @@ void loop() {
         // Pause
         Serial.println("\n=== Pausing Timer ===");
         pomodoro_pause();
+        lastPomodoroState = pomodoro_get_state();
+        updateLightsForState(lastPomodoroState);
         monitor_show_running_screen(pomodoro_get_state(),
                                     pomodoro_get_time_remaining(),
                                     pomodoro_get_completed_count());
@@ -208,6 +290,8 @@ void loop() {
         // Resume
         Serial.println("\n=== Resuming Timer ===");
         pomodoro_resume();
+        lastPomodoroState = pomodoro_get_state();
+        updateLightsForState(lastPomodoroState);
         // Reset lost flag when resuming
         userLost = false;
         monitor_show_running_screen(pomodoro_get_state(),
@@ -223,6 +307,34 @@ void loop() {
   // Button 2: Next menu item (in mensa mode) or Toggle mode/Reset (normal mode)
   if (button2State == LOW && button2LastState == HIGH) {
     if (millis() - lastButton2Press > debounceDelay) {
+
+      if (gamblingMode && gambling_choice_pending()) {
+        bool win = false;
+        if (gambling_register_choice(GamblingChoice::Black, &win)) {
+          Serial.println("\n=== Gambling Choice: BLACK ===");
+          lights_show_break();
+          monitor_gambling_show_result(GamblingChoice::Black, win);
+          if (win) {
+            Serial.println("Result: WIN! Mario theme incoming...");
+            buzzer_music_mario_play_overworld();
+          } else {
+            Serial.println("Result: LOSS. Better luck next time.");
+            buzzer_play_sound_sad1(BUZZER_PIN);
+          }
+          delay(1500);
+          gambling_reset();
+          gamblingMode = false;
+          if (mensaMenuMode) {
+            monitor_show_mensa_menu(mensaMenuIndex, mensaMenuTotal);
+          }
+          PomodoroState refreshedState = pomodoro_get_state();
+          updateLightsForState(refreshedState);
+          lastPomodoroState = refreshedState;
+        }
+        lastButton2Press = millis();
+        button2LastState = button2State;
+        return;
+      }
 
       if (mensaMenuMode) {
         // Navigate to next menu item
@@ -246,6 +358,8 @@ void loop() {
         // Reset to idle when running
         Serial.println("\n=== Resetting Timer ===");
         pomodoro_reset();
+        lastPomodoroState = pomodoro_get_state();
+        updateLightsForState(lastPomodoroState);
         // Reset lost flag when resetting timer
         userLost = false;
         monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
@@ -259,6 +373,7 @@ void loop() {
   // Check if timer finished
   if (pomodoro_is_finished()) {
     Serial.println("\n=== Timer Finished! ===");
+    buzzer_play_sound_happy1(BUZZER_PIN);
     monitor_show_finished_screen(pomodoro_get_completed_count());
     delay(3000);
     monitor_show_idle_screen(selectedMode, pomodoro_get_completed_count());
@@ -267,7 +382,7 @@ void loop() {
   }
 
   // Ultrasound monitoring during work session (both when user is present and lost)
-  if (currentState == POMODORO_WORK || currentState == POMODORO_PAUSED) {
+  if (!mensaMenuMode && (currentState == POMODORO_WORK || currentState == POMODORO_PAUSED)) {
     if (millis() - lastUltrasoundCheck >= ultrasoundCheckInterval) {
       // Take a single measurement (fast, no delays)
       ultrasound_take_single_measurement();
@@ -296,6 +411,8 @@ void loop() {
 
           // Pause the pomodoro timer
           pomodoro_pause();
+          lastPomodoroState = pomodoro_get_state();
+          updateLightsForState(lastPomodoroState);
           Serial.println("Timer paused due to user out of range");
 
           // Play sad tone to indicate user left the workspace
@@ -318,6 +435,8 @@ void loop() {
 
           // Resume the pomodoro timer
           pomodoro_resume();
+          lastPomodoroState = pomodoro_get_state();
+          updateLightsForState(lastPomodoroState);
           Serial.println("Timer resumed - user back in range");
 
           // Play happy tone to celebrate the user's return
@@ -360,6 +479,18 @@ void loop() {
 
     // Update last trigger time for cooldown
     lastShakingTrigger = millis();
+  }
+  else if (shakingDetected && (millis() - lastShakingTrigger >= shakingCooldown) && mensaMenuMode && !gamblingMode && !gambling_choice_pending()) {
+    shakingDetected = false;
+    lastShakingTrigger = millis();
+
+    Serial.println("\n=== Gambling Mode Activated ===");
+    Serial.println("Shake detected while in menu.");
+    Serial.println("Press BTN1 for RED or BTN2 for BLACK to place your bet.");
+    gambling_start();
+    gamblingMode = true;
+    monitor_gambling_show_intro();
+    lights_blink_both(2, 120, 120);
   }
 
   // Update display periodically (only when not in mensa menu mode)

@@ -23,6 +23,11 @@ void buzzer_play_sound_sad1(int buzzerPin);
 void buzzer_play_sound_sad2(int buzzerPin);
 
 /**
+ * Plays the startup sound when the device powers on.
+ */
+void buzzer_play_sound_turn_on(int buzzerPin);
+
+/**
  * Initializes the buzzer pin for Mario theme music.
  * Must be called before playing any Mario music.
  *

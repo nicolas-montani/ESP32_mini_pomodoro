@@ -5,6 +5,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "pomodoro.h"
+#include "gambling.h"
 
 // Display settings
 #define SCREEN_WIDTH 128
@@ -27,6 +28,8 @@ void monitor_show_running_screen(PomodoroState state, unsigned long timeRemainin
 void monitor_show_finished_screen(int completedCount);
 void monitor_show_boot_screen();
 void monitor_show_mensa_menu(int currentIndex, int totalItems);
+void monitor_gambling_show_intro();
+void monitor_gambling_show_result(GamblingChoice choice, bool win);
 
 // Utility functions
 String monitor_format_time(unsigned long seconds);

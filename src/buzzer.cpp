@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include "buzzer.h"
+#include "lights.h"
 
 namespace {
 struct ToneStep {
@@ -43,30 +44,73 @@ constexpr ToneStep sadTone2[] = {
     {NOTE_C4, 260, 140},
 };
 
+constexpr ToneStep turnOnTone[] = {
+    {NOTE_C5, 150, 40},
+    {NOTE_E5, 160, 40},
+    {NOTE_G5, 220, 120},
+};
+
+enum class LightBlink {
+  None,
+  Green,
+  Red,
+};
+
 template <size_t N>
-void playSequence(int buzzerPin, const ToneStep (&steps)[N]) {
+void playSequence(int buzzerPin, const ToneStep (&steps)[N], LightBlink blinkMode = LightBlink::None) {
+  LightsState savedState = lights_capture_state();
   for (const auto& step : steps) {
     tone(buzzerPin, step.frequency, step.durationMs);
-    delay(step.durationMs + step.pauseMs);
+    switch (blinkMode) {
+      case LightBlink::Green:
+        lights_green_on();
+        break;
+      case LightBlink::Red:
+        lights_red_on();
+        break;
+      case LightBlink::None:
+      default:
+        break;
+    }
+    delay(step.durationMs);
     noTone(buzzerPin);
+    switch (blinkMode) {
+      case LightBlink::Green:
+        lights_green_off();
+        break;
+      case LightBlink::Red:
+        lights_red_off();
+        break;
+      case LightBlink::None:
+      default:
+        break;
+    }
+    if (step.pauseMs > 0) {
+      delay(step.pauseMs);
+    }
   }
+  lights_apply_state(savedState);
 }
 }  // namespace
 
 void buzzer_play_sound_happy1(int buzzerPin) {
-  playSequence(buzzerPin, happyTone1);
+  playSequence(buzzerPin, happyTone1, LightBlink::Green);
 }
 
 void buzzer_play_sound_happy2(int buzzerPin) {
-  playSequence(buzzerPin, happyTone2);
+  playSequence(buzzerPin, happyTone2, LightBlink::Green);
 }
 
 void buzzer_play_sound_sad1(int buzzerPin) {
-  playSequence(buzzerPin, sadTone1);
+  playSequence(buzzerPin, sadTone1, LightBlink::Red);
 }
 
 void buzzer_play_sound_sad2(int buzzerPin) {
-  playSequence(buzzerPin, sadTone2);
+  playSequence(buzzerPin, sadTone2, LightBlink::Red);
+}
+
+void buzzer_play_sound_turn_on(int buzzerPin) {
+  playSequence(buzzerPin, turnOnTone, LightBlink::Green);
 }
 
 // ===== Mario Music Notes =====
