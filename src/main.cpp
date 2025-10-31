@@ -600,7 +600,7 @@ void updateDisplay(unsigned long now, PomodoroState currentState) {
   }
 }
 
-}  // namespace
+}  
 
 // ============================================================================
 // INITIALIZATION FUNCTIONS

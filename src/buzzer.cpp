@@ -1,9 +1,19 @@
 #include <Arduino.h>
 #include "buzzer.h"
+#include "lights.h"
 
 namespace {
 // Default buzzer pin
 uint8_t buzzerPin = 13;
+
+// Light colors for different sound types
+enum class LightColor {
+  NONE,
+  GREEN,
+  RED,
+  BOTH,
+  ALTERNATE
+};
 
 struct ToneStep {
   int frequency;
@@ -53,15 +63,52 @@ constexpr ToneStep turnOnTone[] = {
 };
 
 template <size_t N>
-void playSequence(const ToneStep (&steps)[N]) {
+void playSequence(const ToneStep (&steps)[N], LightColor lightColor = LightColor::NONE) {
+  bool toggleState = false;
+
   for (const auto& step : steps) {
+    // Turn on lights based on color
+    switch (lightColor) {
+      case LightColor::GREEN:
+        light_green_on();
+        break;
+      case LightColor::RED:
+        light_red_on();
+        break;
+      case LightColor::BOTH:
+        light_both_on();
+        break;
+      case LightColor::ALTERNATE:
+        if (toggleState) {
+          light_green_on();
+          light_red_off();
+        } else {
+          light_red_on();
+          light_green_off();
+        }
+        toggleState = !toggleState;
+        break;
+      case LightColor::NONE:
+      default:
+        break;
+    }
+
     tone(buzzerPin, step.frequency, step.durationMs);
     delay(step.durationMs);
     noTone(buzzerPin);
+
+    // Turn off lights
+    if (lightColor != LightColor::NONE) {
+      light_both_off();
+    }
+
     if (step.pauseMs > 0) {
       delay(step.pauseMs);
     }
   }
+
+  // Ensure lights are off at the end
+  light_both_off();
 }
 }  // namespace
 
@@ -73,23 +120,23 @@ void buzzer_init(uint8_t pin) {
 }
 
 void buzzer_play_sound_happy1() {
-  playSequence(happyTone1);
+  playSequence(happyTone1, LightColor::GREEN);
 }
 
 void buzzer_play_sound_happy2() {
-  playSequence(happyTone2);
+  playSequence(happyTone2, LightColor::GREEN);
 }
 
 void buzzer_play_sound_sad1() {
-  playSequence(sadTone1);
+  playSequence(sadTone1, LightColor::RED);
 }
 
 void buzzer_play_sound_sad2() {
-  playSequence(sadTone2);
+  playSequence(sadTone2, LightColor::RED);
 }
 
 void buzzer_play_sound_turn_on() {
-  playSequence(turnOnTone);
+  playSequence(turnOnTone, LightColor::ALTERNATE);
 }
 
 // ===== Mario Music Notes =====
