@@ -2,13 +2,18 @@
 
 #include <Arduino.h>
 
+// Pin definition
+#ifndef SHAKING_PIN
+#define SHAKING_PIN 14  // KY-002 vibration/shock sensor (moved from 12 due to boot strapping)
+#endif
+
 /**
  * Initializes the KY-002 vibration/shock sensor with interrupt support.
  * Must be called before using any other shaking functions.
  *
- * @param sensorPin The digital pin connected to the KY-002 sensor
+ * @param sensorPin The digital pin connected to the KY-002 sensor (default: SHAKING_PIN)
  */
-void shaking_init(uint8_t sensorPin);
+void shaking_init(uint8_t sensorPin = SHAKING_PIN);
 
 /**
  * Attaches an interrupt handler that triggers immediately when shaking is detected.

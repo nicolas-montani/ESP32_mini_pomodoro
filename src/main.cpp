@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include "config.h"
 #include "pomodoro.h"
 #include "monitor.h"
 #include "ultrasound.h"
@@ -11,20 +12,6 @@
 // ============================================================================
 // CONSTANTS
 // ============================================================================
-
-// Pin definitions
-#define SDA_PIN 22
-#define SCL_PIN 21
-#define BUTTON1_PIN 5  // Start/Pause button
-#define BUTTON2_PIN 4  // Toggle Work/Break OR Next/Reset when running
-#ifndef BUZZER_PIN
-#define BUZZER_PIN 13
-#endif
-#define SHAKING_PIN 14
-
-// WiFi credentials
-const char* WIFI_SSID = "Self_Destruction_Device";
-const char* WIFI_PASSWORD = "123456789";
 
 // Timing constants
 const unsigned long DEBOUNCE_DELAY_MS = 200;
@@ -635,13 +622,13 @@ void initializeInputPins() {
 }
 
 void initializeOutputs() {
-  buzzer_init(BUZZER_PIN);
+  buzzer_init();  // Uses BUZZER_PIN from buzzer.h
   buzzer_play_sound_turn_on();
   lights_init();
 }
 
 void initializeDisplay() {
-  if (!monitor_init(SDA_PIN, SCL_PIN)) {
+  if (!monitor_init()) {  // Uses SDA_PIN and SCL_PIN from monitor.h
     Serial.println("Failed to initialize monitor!");
     for(;;);
   }
@@ -668,7 +655,7 @@ void initializeSensors() {
   gambling_init();
   ultrasound_init();
   ultrasound_measure_initial_distance();
-  shaking_init(SHAKING_PIN);
+  shaking_init();  // Uses SHAKING_PIN from shaking.h
   shaking_attach_interrupt(onShakingDetected);
 }
 

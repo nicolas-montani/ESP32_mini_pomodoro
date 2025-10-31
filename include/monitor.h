@@ -6,6 +6,7 @@
 #include <Adafruit_SSD1306.h>
 #include "pomodoro.h"
 #include "gambling.h"
+#include "config.h"
 
 // Display settings
 #define SCREEN_WIDTH 128
@@ -20,7 +21,7 @@ enum IdleMode {
 };
 
 // Initialize the monitor
-bool monitor_init(int sda_pin, int scl_pin);
+bool monitor_init(int sda_pin = SDA_PIN, int scl_pin = SCL_PIN);
 
 // Display functions
 void monitor_show_idle_screen(IdleMode selectedMode, int completedCount);
