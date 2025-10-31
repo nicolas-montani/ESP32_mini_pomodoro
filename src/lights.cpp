@@ -3,9 +3,21 @@
 
 // Initialize the LED pins
 void lights_init() {
+    Serial.println("Initializing LEDs...");
+
     pinMode(GREEN_LED_PIN, OUTPUT);
     pinMode(RED_LED_PIN, OUTPUT);
-    light_both_off(); // Start with both LEDs off
+
+    // Initial test: quick blink to confirm LEDs are working
+    light_both_on();
+    delay(200);
+    light_both_off();
+    delay(100);
+    light_both_on();
+    delay(200);
+    light_both_off();
+
+    Serial.println("LEDs initialized successfully!");
 }
 
 // Turn green LED on

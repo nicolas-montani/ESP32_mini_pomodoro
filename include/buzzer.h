@@ -2,13 +2,18 @@
 
 #include <Arduino.h>
 
+// Pin definition
+#ifndef BUZZER_PIN
+#define BUZZER_PIN 13  // Default buzzer pin
+#endif
+
 /**
  * Initializes the buzzer pin.
  * Must be called before playing any sounds.
  *
- * @param pin The pin connected to the buzzer (default: 13)
+ * @param pin The pin connected to the buzzer (default: BUZZER_PIN)
  */
-void buzzer_init(uint8_t pin = 13);
+void buzzer_init(uint8_t pin = BUZZER_PIN);
 
 /**
  * Plays a short "happy" jingle variation.
