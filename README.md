@@ -11,7 +11,7 @@
 *Work smarter, not harder - with a timer that keeps you honest!*
 
 </div>
-[IMG_0080](https://github.com/user-attachments/assets/acec3aaf-cde7-4af8-84aa-ad4e47475164)
+
 
 ---
 
